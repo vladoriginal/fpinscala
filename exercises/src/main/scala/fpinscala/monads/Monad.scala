@@ -63,6 +63,7 @@ trait Monad[M[_]] extends Functor[M] {
 
 case class Reader[R, A](run: R => A)
 
+//noinspection TypeAnnotation
 object Monad {
   val genMonad = new Monad[Gen] {
     def unit[A](a: => A): Gen[A] = Gen.unit(a)
@@ -74,14 +75,25 @@ object Monad {
 
   def parserMonad[P[+_]](p: Parsers[P]): Monad[P] = ???
 
-  val optionMonad: Monad[Option] = ???
+  val optionMonad: Monad[Option] = new Monad[Option] {
+    override def unit[A](a: => A): Option[A] = Some(a)
+    override def flatMap[A, B](ma: Option[A])(f: A => Option[B]): Option[B] = ma flatMap f
+  }
 
   val streamMonad: Monad[Stream] = ???
 
-  val listMonad: Monad[List] = ???
+  val listMonad: Monad[List] = new Monad[List] {
+    override def unit[A](a: => A): List[A] = a :: Nil
+    override def flatMap[A, B](ma: List[A])(f: A => List[B]): List[B] = ma flatMap f
+  }
 
-  def stateMonad[S] = ???
-
+  def stateMonad[S] = {
+    type SM[A] = State[S, A]
+    new Monad[SM] {
+      override def unit[A](a: => A): State[S, A] = State(s => (a, s))
+      override def flatMap[A, B](ma: State[S, A])(f: A => State[S, B]): State[S, B] = ma flatMap f
+    }
+  }
   val idMonad: Monad[Id] = ???
 
   def readerMonad[R] = ???
