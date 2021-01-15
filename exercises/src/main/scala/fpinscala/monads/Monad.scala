@@ -69,7 +69,7 @@ object Monad {
       ma flatMap f
   }
 
-  val parMonad: Monad[Par] = ???
+  def parMonad: Monad[Par] = ???
 
   def parserMonad[P[+_]](p: Parsers[P]): Monad[P] = ???
 
@@ -78,7 +78,7 @@ object Monad {
     override def flatMap[A, B](ma: Option[A])(f: A => Option[B]): Option[B] = ma flatMap f
   }
 
-  val streamMonad: Monad[Stream] = ???
+  def streamMonad: Monad[Stream] = ???
 
   val listMonad: Monad[List] = new Monad[List] {
     override def unit[A](a: => A): List[A] = a :: Nil

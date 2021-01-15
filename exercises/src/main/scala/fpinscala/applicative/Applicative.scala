@@ -11,20 +11,32 @@ import language.implicitConversions
 
 trait Applicative[F[_]] extends Functor[F] {
 
-  def map2[A,B,C](fa: F[A], fb: F[B])(f: (A, B) => C): F[C] = ???
+  def map2[A,B,C](fa: F[A], fb: F[B])(f: (A, B) => C): F[C] = apply(apply(unit(f.curried))(fa))(fb)
 
-  def apply[A,B](fab: F[A => B])(fa: F[A]): F[B] = ???
+  def apply[A,B](fab: F[A => B])(fa: F[A]): F[B] = map2(fa, fab)((a, ab) => ab(a))
 
   def unit[A](a: => A): F[A]
 
   def map[A,B](fa: F[A])(f: A => B): F[B] =
     apply(unit(f))(fa)
 
-  def sequence[A](fas: List[F[A]]): F[List[A]] = ???
+  def map3[A,B,C,D](fa: F[A], fb: F[B], fc: F[C])(f: (A, B, C) => D): F[D] =
+    apply(apply(apply(unit(f.curried))(fa))(fb))(fc)
 
-  def traverse[A,B](as: List[A])(f: A => F[B]): F[List[B]] = ???
+  def map4[A,B,C,D,E](fa: F[A], fb: F[B], fc: F[C], fd: F[D])(f: (A, B, C, D) => E): F[E] =
+    apply(apply(apply(apply(unit(f.curried))(fa))(fb))(fc))(fd)
 
-  def replicateM[A](n: Int, fa: F[A]): F[List[A]] = ???
+  def sequence[A](fas: List[F[A]]): F[List[A]] = traverse(fas)(identity)
+
+  def traverse_[A,B](as: List[A])(f: A => F[B]): F[List[B]] = as match {
+    case Nil => unit(List.empty[B])
+    case h::t => map2(f(h), traverse(t)(f))(_::_)
+  }
+
+  def traverse[A,B](as: List[A])(f: A => F[B]): F[List[B]] =
+    as.foldRight(unit(List.empty[B]))((a, ft) => map2(f(a), ft)(_::_))
+
+  def replicateM[A](n: Int, fa: F[A]): F[List[A]] = sequence(List.fill(n)(fa))
 
   def factor[A,B](fa: F[A], fb: F[B]): F[(A,B)] = ???
 
@@ -80,9 +92,34 @@ object Applicative {
     override def map2[A,B,C](a: Stream[A], b: Stream[B])( // Combine elements pointwise
                     f: (A,B) => C): Stream[C] =
       a zip b map f.tupled
+
+    def useSeq[A](a: List[Stream[A]]): Stream[List[A]] = sequence(a)
   }
 
-  def validationApplicative[E]: Applicative[({type f[x] = Validation[E,x]})#f] = ???
+  val listApplicative = new Applicative[List] {
+    def unit[A](a: => A): List[A] = List(a)
+
+    //    override def map2[A, B, C](fa: List[A], fb: List[B])(f: (A, B) => C): List[C] = fa zip fb map f.tupled
+//    override def apply[A, B](fab: List[A => B])(fa: List[A]): List[B] = (fab zip fa).map{case(f, a) => f(a)}
+    override def apply[A, B](fab: List[A => B])(fa: List[A]): List[B] = for {
+        f <- fab
+        a <- fa
+      } yield f(a)
+  }
+
+  def validationApplicative[E]: Applicative[({type f[x] = Validation[E,x]})#f] = new Applicative[({
+  type f[x] = Validation[E, x]
+})#f] {
+    override def unit[A](a: => A): Validation[E, A] = Success(a)
+
+    override def map2[A, B, C](fa: Validation[E, A], fb: Validation[E, B])(f: (A, B) => C): Validation[E, C] =
+      (fa, fb) match {
+        case (Success(a), Success(b)) => Success(f(a, b))
+        case (Failure(h1, t1), Failure(h2, t2)) => Failure(h1, t1 ++ (h2 +: t2))
+        case (f@Failure(_, _), _) => f
+        case (_, f@Failure(_, _)) => f
+      }
+  }
 
   type Const[A, B] = A
 
